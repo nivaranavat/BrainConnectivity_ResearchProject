@@ -7,6 +7,7 @@ import random
 import bct
 import math
 import statistics
+import matplotlib.colors
     
 #the goal is to create a randomized "null" of the given brain network
 #have the different functions to do the different aspects of our null creation
@@ -345,99 +346,129 @@ def plot_mri_and_scrambled_timeseries(folder_path, time_end, save_path="TimeSeri
 
     return roi_timeseries, null_timeseries
     
+    
+def compute_correlation_matrices(time_series1, time_series2, method="pearson"):
+    """
+    Computes correlation matrices for two sets of time series and returns their normalized forms.
+    
+    Args:
+        time_series1 (list): Original brain ROI time series.
+        time_series2 (list): Phase-scrambled/null time series.
+        method (str): Correlation method. Default is 'pearson'.
 
-def cell_3():
-    #find the correlation matrix and plot for the observed brain network and the phase scrambled null created
+    Returns:
+        tuple: (brain_corr_matrix, null_corr_matrix, diff_matrix)
+    """
+    brain_corr = createCorrelationMatrix(time_series1, method) - np.identity(len(time_series1))
+    null_corr = createCorrelationMatrix(time_series2, method) - np.identity(len(time_series2))
+    diff = brain_corr - null_corr
+    return brain_corr, null_corr, diff
+
+
+def plot_correlation_matrices(brain_corr, null_corr, diff_corr, save_path="Correlation_Matrix_Plots.png"):
+    """
+    Plots the correlation matrices: brain, null, and their difference.
     
-    import matplotlib.colors
-    
+    Args:
+        brain_corr (np.ndarray): Brain correlation matrix.
+        null_corr (np.ndarray): Null/scrambled correlation matrix.
+        diff_corr (np.ndarray): Difference matrix.
+        save_path (str): Filename to save the plot.
+    """
     cmap = "hsv"
     norm = matplotlib.colors.Normalize(vmin=-1, vmax=1)
-    
-    
-    #plot out the correlation matrices
-    fig, ax = plt.subplots(nrows=1 , ncols=3, figsize=(25, 5))
-    
-    #create the correlation matrix for brain and null
-    brain_correlationMatrix = createCorrelationMatrix(roi_timeseries,"pearson")
-    brain_correlationMatrix = brain_correlationMatrix - np.identity(150)
-    null1_correlationMatrix = createCorrelationMatrix(null_timeseries,"pearson")
-    null1_correlationMatrix = null1_correlationMatrix - np.identity(150)
-    
-    #plot the brain's correlation matrix
-    ax[0].matshow((brain_correlationMatrix-np.identity(150)),cmap = cmap, norm = norm)
+
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(25, 5))
+
+    ax[0].matshow(brain_corr, cmap=cmap, norm=norm)
     ax[0].set_title("Brain Correlation Matrix")
     ax[0].set_ylabel("Correlation Strength")
-    
-    #plot the null's correlation matrix
-    ax[1].matshow((null1_correlationMatrix-np.identity(150)),cmap = cmap, norm = norm)
+
+    ax[1].matshow(null_corr, cmap=cmap, norm=norm)
     ax[1].set_title("Phase Scrambled Null Correlation Matrix")
     ax[1].set_ylabel("Correlation Strength")
-                  
-    #plot the difference between brain and null correlation matrix             
-    ax[2].matshow((brain_correlationMatrix-np.identity(150))-(null1_correlationMatrix-np.identity(150)),cmap = cmap, norm = norm)
+
+    ax[2].matshow(diff_corr, cmap=cmap, norm=norm)
     ax[2].set_title("Difference between Brain and Scrambled Correlation Matrix")
     ax[2].set_ylabel("Correlation Strength")
-    
-    
-    #save the plots and display  
-    plt.savefig("Correlation Matrix Plots.png")
-    plt.show()
 
-def cell_4():
-    #binarize the networks using 15% density
-    
-    cmap = "binary_r"
-    norm = matplotlib.colors.Normalize(vmin=-1, vmax=1)
-    
-    
-    #plot out the binarized matrices based on the correlation matrix and the threshold
-    fig, ax = plt.subplots(nrows=1 , ncols=3, figsize=(25, 5))
-    
-    #binarize both brain and null correlation matrix
-    brain_threshold = findThreshold(brain_correlationMatrix,0.15)
-    null1_threshold = findThreshold(null1_correlationMatrix,0.15)
-    brain_binaryMatrix= binarize(brain_correlationMatrix,brain_threshold)
-    null1_binaryMatrix = binarize(null1_correlationMatrix,null1_threshold)
-    
-    print("Brain threshold: ", brain_threshold)
-    print("Null1 threshold: ", null1_threshold)
-    
-    #plot the brain's binarized matrix
-    ax[0].matshow((brain_binaryMatrix),cmap = cmap, norm = norm)
-    ax[0].set_title("Brain Binarized Matrix")
-    ax[0].set_ylabel("Correlation Strength")
-    
-    #plot the null's graph
-    ax[1].matshow((null1_binaryMatrix),cmap = cmap, norm = norm)
-    ax[1].set_title("Phase Scrambled Null Binarized Matrix")
-    ax[1].set_ylabel("Correlation Strength")
-                  
-               
-    #plot out the difference
-    ax[2].matshow((brain_binaryMatrix)-(null1_binaryMatrix),cmap = cmap, norm = norm)
-    ax[2].set_title("Difference between Brain and Scrambled Binarized Matrix")
-    ax[2].set_ylabel("Correlation Strength")
-            
-        
-    #save the plot and display it
-    plt.savefig("Binarized Matrix Plots.png")
+    plt.savefig(save_path)
     plt.show()
+    
 
-def cell_5():
-    
-    #next step is to check the ratios of coefficient and path length between our created null and the observed brain
-    
-    #calculate our clustering coefficient, path length, and small worldness
-    #values should be >1 or ~1
-    
-    small_worldness, normalized_ccoef, normalized_path_length = calculate_small_worldness(brain_binaryMatrix, null1_binaryMatrix)
-    
-    print()
-    print("Ratios:")
-    print("Brain/Null1 path length: ", normalized_path_length)
-    print("Brain/Null1 clustering coefficient: " , normalized_ccoef)
-    print("Brain small worldness with null1: ", small_worldness)
+def plot_small_worldness_comparison(roi_path, 
+                                    method_1='phase', 
+                                    method_2='correlation_randomization',
+                                    threshold_range=np.arange(0.15, 0.55, 0.05),
+                                    show_plot=True):
+    """
+    Computes and plots small worldness across a range of thresholds 
+    comparing a real brain network to two null models.
+
+    Parameters:
+    - roi_path (str): Path to MRI time series data.
+    - method_1 (str): First null model type ('phase').
+    - method_2 (str): Second null model type ('correlation_randomization').
+    - threshold_range (np.array): Array of threshold values to iterate over.
+    - show_plot (bool): Whether to display the plot.
+
+    Returns:
+    - small_worldness_dict (dict): Small worldness values for both null models.
+    """
+    # Load brain time series and compute correlation matrix
+    x, roi_timeseries = readMRIFile(roi_path, 200)
+    brain_corr = createCorrelationMatrix(roi_timeseries, "pearson")
+
+    # First null model: Phase scrambling
+    if method_1 == "phase":
+        null1_timeseries = [phaseScramble1(ts) for ts in roi_timeseries]
+        null1_corr = createCorrelationMatrix(null1_timeseries, "pearson")
+    else:
+        raise ValueError("Unsupported method_1: Only 'phase' is currently implemented.")
+
+    # Second null model: Correlation matrix randomization
+    if method_2 == "correlation_randomization":
+        sd = getSDVofROITimeseries(roi_timeseries)
+        null2_corr = null_covariance(brain_corr, sd)
+    else:
+        raise ValueError("Unsupported method_2: Only 'correlation_randomization' is implemented.")
+
+    # Helper function for thresholding and computing small-worldness
+    def compute_sws_for_null(null_corr, label):
+        sws_list = []
+        for perc in threshold_range:
+            brain_thresh = findThreshold(brain_corr, perc)
+            null_thresh = findThreshold(null_corr, perc)
+
+            brain_bin = binarize(brain_corr, brain_thresh)
+            null_bin = binarize(null_corr, null_thresh)
+
+            sws, _, _ = calculate_small_worldness(brain_bin, null_bin)
+            sws_list.append(sws)
+
+        return sws_list
+
+    # Compute small-worldness values
+    sws_null1 = compute_sws_for_null(null1_corr, "Null 1")
+    sws_null2 = compute_sws_for_null(null2_corr, "Null 2")
+
+    # Plot
+    if show_plot:
+        plt.plot(threshold_range, sws_null1, marker="o", label="Phase Scrambled Null")
+        plt.plot(threshold_range, sws_null2, marker="o", label="Correlation Randomized Null")
+        plt.xlabel("Threshold Percentage")
+        plt.ylabel("Small Worldness")
+        plt.title("Small Worldness vs Threshold")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    return {
+        "thresholds": threshold_range,
+        "null_1": sws_null1,
+        "null_2": sws_null2
+    }
 
 def cell_6():
     #try the range of 10% to 50% threshold density for binarizing the correlation matrix and plotting it
