@@ -85,19 +85,18 @@ def kmeans_flexibility_analysis(data_path, drugs_list, timepoints, n_clusters=15
     return result_dict
 
 
-def main():
+def main(file_path):
     # Example synthetic data clustering
     X = generate_synthetic_clusters()
     kmean = fit_kmeans(X, n_clusters=2)
     # Example real data clustering
-    x, roi = utils.readMRIFile("/Users/niva.ranavat/UCI Research/Data/SAL_01", 200)
+    x, roi = utils.readMRIFile(file_path+"/SAL_O1", 200)
     corr = utils.createCorrelationMatrix(roi, "pearson")
     kmean_corr = fit_kmeans(corr, n_clusters=15)
     # Example full workflow
-    data_path = "/Users/niva.ranavat/UCI Research/Data"
     drugs_list = ("SAL",)
     timepoints = [30, 60, 90, 120, 150]
-    result_dict = kmeans_flexibility_analysis(data_path, drugs_list, timepoints, n_clusters=15)
+    result_dict = kmeans_flexibility_analysis(file_path, drugs_list, timepoints, n_clusters=15)
     return {
         'synthetic_kmeans': kmean,
         'corr_kmeans': kmean_corr,

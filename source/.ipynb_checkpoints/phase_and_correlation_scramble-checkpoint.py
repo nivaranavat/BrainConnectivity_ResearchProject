@@ -1,40 +1,19 @@
-import numpy as np
-from matplotlib import pyplot as plt
-import pandas as pd
+from source.utils.io_utils import readMRIFile, load_txt
+from source.utils.matrix_utils import createCorrelationMatrix, findThreshold, binarize, randomizeCorrelationMatrix, null_covariance
+from source.utils.plot_utils import plot_timeseries, plot_correlation_matrix, plot_flexibility_results
+from source.utils.phase_utils import *
 import networkx as nx
-import numpy.fft
-import random
-import bct
+import numpy as np
 import math
+import random
+import pandas as pd
+import bct
 import statistics
 import matplotlib.colors
+import matplotlib.pyplot as plt
     
 #the goal is to create a randomized "null" of the given brain network
 #have the different functions to do the different aspects of our null creation
-    
-def readMRIFile(filename, size):
-
-    #reads the file and creates a domain and range that will be plotted
-    #returns the data, and the x values to not have to copy them over and over again
-
-
-    #x = [i for i in range(0,size,2)]
-
-    # create the x 
-    x = np.arange(0,size,1)
-
-    roi_timeseries = []
-    for num in range(2,152):
-        #open file
-        file = filename + str(num) + '.txt'
-        with open(file) as f:
-            lines = f.readlines()
-            y = np.loadtxt(file)
-            roi_timeseries.append(y)
-
-    return x, roi_timeseries
-
-
 
 def createCorrelationMatrix(roi_timeseries, method):
     """
@@ -51,145 +30,12 @@ def createCorrelationMatrix(roi_timeseries, method):
 
     return corr_matrix
 
-
-def findThreshold(corr_matrix, density):
-    """
-    return the threshold based on the density given for the correlation matrix
-    density must be <= 1 for this function to work
-
-    """
-    #remove the diagonal 
-    #matrix = matrix - np.identity(150)
-    #find the threshold by sorting all values in matrix
-    #all_values = np.array([])
-    #for i in range(0,len(matrix)):
-        #all_values = np.append(all_values,matrix[i][i+1:])
-
-    #all_values = np.sort(all_values)
-
-    #find the threshold that is at top %percentage of the matrix
-    #print(all_values)
-    #threshold = all_values[int(((len(matrix)*len(matrix) - len(matrix))/2)*breaking_percentage)+len(matrix)]
-    #print("before",threshold,int(((len(matrix)*len(matrix) - len(matrix))/2)*breaking_percentage)+len(matrix) )
-    #threshold = all_values[int(len(all_values)*(1-breaking_percentage))]
-    #print("after",threshold,int(len(all_values)*(1-breaking_percentage)),all_values[int(len(all_values)*(1-breaking_percentage))])
-
-    threshold = np.percentile(corr_matrix-np.identity(150), (1 - density)*100)
-    return threshold
-
-def binarize(matrix,threshold):
-    """
-    takes the matrix and binarizes it based on the percentage given% threshold
-    binarizes it with values of 0 and 1
-    values > threshold -> 1
-    values < threshold -> 0
-    returns the finished matrix at the end
-    """
-
-    matrix_copy = matrix.copy()
-
-    #binarize matrix based on threshold
-    rows = matrix_copy.shape[0]
-    cols = matrix_copy.shape[1]
-    for i in range(len(matrix)):
-        for j in range(len(matrix[i])):
-            if matrix_copy[i][j]>threshold and i!=j:
-                matrix_copy[i][j] = 1
-            else:
-                matrix_copy[i][j] = 0
-
-    return np.array(matrix_copy)
-
-
-
-
-def createNetwork(matrix):
-    """
-    to visualize the network create a drawing out of it
-    takes the binarized matrix and makes a network graph out of it
-    returning the network variable
-    """
-    network = nx.from_numpy_matrix(matrix)
-    nx.draw(network, node_size = 20, with_labels = True)
-    return network
-
-
-
-#two different methods to phase scramble currently
-
-def phaseScramble1(data):
-    """
-    phase Scrambling the the first way we thought
-    take the phases of the data given, scramble them
-    then put them back into the inverse fourier
-    """
-
-    fs = np.fft.fft(data)
-    pow_fs = np.abs(fs) ** 2
-    phase_fs = np.angle(fs)
-    phase_fsr = phase_fs.copy()
-
-    #adding a random value between 0 and 2 Pi
-    for i in range(len(phase_fsr)):
-        add = np.random.uniform(0,2*math.pi)
-        phase_fsr[i] += add
-
-    #np.random.shuffle(phase_fsr)
-    fsrp = np.sqrt(pow_fs) * (np.cos(phase_fsr) + 1j * np.sin(phase_fsr))
-    tsr = np.fft.ifft(fsrp)
-
-    #sqrt of that sum of squared of real + imag
-    # sqrt of real^2+ imag^2
-
-    #tsr = np.abs(tsr)
-
-    return tsr
-
-def phaseScramble2(nparray,n):
-    """
-
-    different approach but similar to previous strategy
-
-    take the fourier of the time series given
-    but split the phases into a left and right side and shuffle them different
-
-    """
-
-    series = pd.Series(nparray)
-    fourier = numpy.fft.fft(series)
-    pow_fs = np.abs(fourier) ** 2.
-    phase_fs = np.angle(fourier)
-    phase_fsr = phase_fs.copy()
-
-    if len(nparray) % 2 == 0:
-        phase_fsr_lh = phase_fsr[1:len(phase_fsr)//2]
-    else:
-        phase_fsr_lh = phase_fsr[1:len(phase_fsr)//2 + 1]
-
-    np.random.shuffle(phase_fsr_lh)
-
-    if len(nparray) % 2 == 0:
-        phase_fsr_rh = -phase_fsr_lh[::-1]
-        phase_fsr = np.concatenate((np.array((phase_fsr[0],)), phase_fsr_lh,
-                                    np.array((phase_fsr[len(phase_fsr)//2],)),
-                                    phase_fsr_rh))
-    else:
-        phase_fsr_rh = -phase_fsr_lh[::-1]
-        phase_fsr = np.concatenate((np.array((phase_fsr[0],)), phase_fsr_lh, phase_fsr_rh))
-
-    fsrp = np.sqrt(pow_fs) * (np.cos(phase_fsr) + 1j * np.sin(phase_fsr))
-    tsr = numpy.fft.ifft(fsrp)
-
-    return tsr
-
-
 def calculate_sdv(vector):
     """
     param: vector is a Nx1 vector that represents a ROI
     return the standard deviation of that vector
     """
     return np.std(vector)
-
 
 def getSDVofROITimeseries(roi_timeseries):
 
@@ -218,37 +64,6 @@ def null_covariance(W,sd):
     a = np.diag(1 / np.diag(c))
     return np.dot(a, np.dot(c, a))
 
-
-
-def randomizeCorrelationMatrix(matrix,sd):
-    """
-    randomize the correlation matrix
-    any row and column and is switched, it's corresponding pair value is also switched
-    (r,c) and (c,r) are both switched
-    """
-
-#     null_correlation_matrix = null_covariance(matrix,sd)
-#     #null_correlation_matrix = bct.null_model_und_sign(matrix)
-#     return null_correlation_matrix
-
-
-
-    corr_matrix = matrix.copy()
-    length = len(corr_matrix)
-    for r in range(length):
-        for c in range(r+1, length):
-            i = random.choices([i for i in range(length)])[0]
-            j = random.choices([i for i in range(length)])[0]
-            if i==j:
-                j = random.choices([i for i in range(length)])[0]
-            corr_matrix[r][c] , corr_matrix[i][j] = corr_matrix[i][j], corr_matrix[r][c]
-            #symmetry 
-            corr_matrix[c][r] , corr_matrix[j][i] = corr_matrix[j][i], corr_matrix[c][r]
-
-    return corr_matrix
-
-
-
 def calculate_clustering_coef(binaryMatrix):
     """
     find the clustering coefficient of the given binarized matrix
@@ -258,7 +73,6 @@ def calculate_clustering_coef(binaryMatrix):
     ccoef = statistics.harmonic_mean(cc_vector)  #need to take the harmonic mean
 
     return ccoef
-
 
 def calculate_path_length(binaryMatrix):
     """
@@ -293,58 +107,48 @@ def calculate_small_worldness(observed, randomized):
 
     return small_worldness,ccoef_ratio,path_length_ratio   
 
-
-def plot_mri_and_scrambled_timeseries(folder_path, time_end, save_path="TimeSeries_Plots.png", show_plot=True, save_plot=True):
+# Domain-specific phase scrambling functions (not in utils, so keep here)
+def phase_scramble_1(data):
     """
-    Reads MRI data from a folder, applies phase scrambling to each time series,
-    and plots the original, scrambled, and their difference.
-
-    Parameters:
-    - folder_path (str): Path to the MRI files (e.g. '.../SAL_01/roi').
-    - time_end (int): Upper limit of the time domain (e.g. 200).
-    - save_path (str): Filename to save the figure (default: 'TimeSeries_Plots.png').
-    - show_plot (bool): Whether to show the plot using plt.show().
-    - save_plot (bool): Whether to save the figure.
+    Phase scrambling: add random phase to each frequency component.
     """
-    x, roi_timeseries = readMRIFile(folder_path, time_end)
-    
-    # Apply phase scrambling
-    null_timeseries = []
-    for i in roi_timeseries:
-        scrambled = phaseScramble1(i)
-        null_timeseries.append(scrambled)
-    
-    # Create the plot
-    fig, ax = plt.subplots(nrows=1 , ncols=3, figsize=(25, 5))
+    fs = np.fft.fft(data)
+    pow_fs = np.abs(fs) ** 2
+    phase_fs = np.angle(fs)
+    phase_fsr = phase_fs.copy()
+    for i in range(len(phase_fsr)):
+        add = np.random.uniform(0, 2 * math.pi)
+        phase_fsr[i] += add
+    fsrp = np.sqrt(pow_fs) * (np.cos(phase_fsr) + 1j * np.sin(phase_fsr))
+    tsr = np.fft.ifft(fsrp)
+    return tsr
 
-    # Plot original time series
-    for i in roi_timeseries:
-        ax[0].plot(x, i)
-    ax[0].set_title("Brain Time Series")
-    ax[0].set_xlabel("Time")
-    ax[0].set_ylabel("MRI Value")
+def phase_scramble_2(nparray):
+    """
+    Phase scrambling: split phases, shuffle, and mirror.
+    """
+    series = pd.Series(nparray)
+    fourier = np.fft.fft(series)
+    pow_fs = np.abs(fourier) ** 2.
+    phase_fs = np.angle(fourier)
+    phase_fsr = phase_fs.copy()
+    if len(nparray) % 2 == 0:
+        phase_fsr_lh = phase_fsr[1:len(phase_fsr)//2]
+    else:
+        phase_fsr_lh = phase_fsr[1:len(phase_fsr)//2 + 1]
+    np.random.shuffle(phase_fsr_lh)
+    if len(nparray) % 2 == 0:
+        phase_fsr_rh = -phase_fsr_lh[::-1]
+        phase_fsr = np.concatenate((np.array((phase_fsr[0],)), phase_fsr_lh,
+                                    np.array((phase_fsr[len(phase_fsr)//2],)),
+                                    phase_fsr_rh))
+    else:
+        phase_fsr_rh = -phase_fsr_lh[::-1]
+        phase_fsr = np.concatenate((np.array((phase_fsr[0],)), phase_fsr_lh, phase_fsr_rh))
+    fsrp = np.sqrt(pow_fs) * (np.cos(phase_fsr) + 1j * np.sin(phase_fsr))
+    tsr = np.fft.ifft(fsrp)
+    return tsr
 
-    # Plot scrambled time series (real part only)
-    for scrambled in null_timeseries:
-        ax[1].plot(x, scrambled.real)
-    ax[1].set_title("Phase Scrambled Null Time Series")
-    ax[1].set_xlabel("Time")
-    ax[1].set_ylabel("MRI Value")
-
-    # Plot difference
-    for original, scrambled in zip(roi_timeseries, null_timeseries):
-        ax[2].plot(x, original - scrambled.real)
-    ax[2].set_title("Difference Between Brain and Scrambled Time Series")
-    ax[2].set_xlabel("Time")
-    ax[2].set_ylabel("MRI Value")
-
-    # Save and/or show
-    if save_plot:
-        plt.savefig(save_path)
-    if show_plot:
-        plt.show()
-
-    return roi_timeseries, null_timeseries
     
     
 def compute_correlation_matrices(time_series1, time_series2, method="pearson"):
@@ -470,348 +274,157 @@ def plot_small_worldness_comparison(roi_path,
         "null_2": sws_null2
     }
 
-def cell_6():
-    #try the range of 10% to 50% threshold density for binarizing the correlation matrix and plotting it
-    
-    
-    #first collect the data for the brain
-    x ,roi_timeseries = readMRIFile('/Users/niva.ranavat/Desktop/Data/SAL_01/roi',200)
-    brain_correlationMatrix = createCorrelationMatrix(roi_timeseries,"pearson")
-    
-    #scramble the phases
-    null_timeseries = []
-    #doing the fourier transform on each 
-    for i in range(len(roi_timeseries)):
-        series = phaseScramble1(roi_timeseries[i])
-        null_timeseries.append(series)
-    
-    #correlation matrix
-    null1_correlationMatrix = createCorrelationMatrix(null_timeseries,"pearson")
-    
-    small_worldness_values_null1 = []
-    percentage = 0.15
-    
-    #the loop for the range
-    while percentage <= 0.50:
-        
-        
-        # get the threshold
-        brain_threshold = findThreshold(brain_correlationMatrix,percentage)
-        null1_threshold = findThreshold(null1_correlationMatrix,percentage)
-        
-        #binarize
-        brain_binaryMatrix = binarize(brain_correlationMatrix, brain_threshold)
-        null1_binaryMatrix= binarize(null1_correlationMatrix,null1_threshold)
-        
-        
-        #calculate small worldness
-        small_worldness, normalized_ccoef, normalized_path_length = calculate_small_worldness(brain_binaryMatrix, null1_binaryMatrix)
-        small_worldness_values_null1.append(small_worldness)
-                                                                                              
-        percentage += 0.05
-    
-        
-    
-    plt.plot(np.arange(0.15,0.55,0.05),small_worldness_values_null1,marker ="o")
-    plt.xlabel("threshold percentage")
-    plt.ylabel("small worldness")
-    plt.title("Null 1 Phase scrambling Small Worldness")
-    plt.show()
-    
-    
-        
-        
-        
+def run_small_worldness_analysis(
+    roi_path,
+    threshold_start=0.15,
+    threshold_end=0.60,
+    threshold_step=0.05,
+    iterations=1,
+    include_brain=True,
+    null_models=None,
+    null_labels=None,
+    plot_title="Small Worldness Comparison",
+    plot=True,
+    save_path=None
+):
+    """
+    Generalized function to compute and compare small worldness metrics for brain and up to two null models.
 
-def cell_7():
-    #getting the small worldness ratio for phase scrambled null and correlation matrix null and plotting it
+    Parameters:
+    - roi_path: str, path to ROI data.
+    - threshold_start, threshold_end, threshold_step: floats for thresholding.
+    - iterations: number of iterations to average over.
+    - include_brain: whether to include brain correlation matrix in analysis.
+    - null_models: list of functions, each returning a correlation matrix given (brain_corr, roi_ts, sd).
+    - null_labels: list of labels corresponding to each null model.
+    - plot_title: title for the plot.
+    - plot: whether to show the plots.
+    - save_path: where to save the plot (if provided).
     
-    
-    small_worldness_values_null2 = []
-    percentage = 0.15
-    
-    #randomize the correlation matrix
-    sd = getSDVofROITimeseries(roi_timeseries)
-    null2_correlationMatrix = null_covariance(brain_correlationMatrix,sd)
-    
-    while percentage <= 0.50:
-        
-        # get the threshold
-        brain_threshold = findThreshold(brain_correlationMatrix,percentage)
-        null2_threshold = findThreshold(null2_correlationMatrix,percentage)
-        
-        #binarize
-        brain_binaryMatrix = binarize(brain_correlationMatrix,brain_threshold)
-        null2_binaryMatrix = binarize(null2_correlationMatrix,null2_threshold)
-        
-        print("With a percentage of: ", percentage, " Brain threshold: ", brain_threshold)
-        print("With a percentage of: ",percentage , " Null2 threshold: ", null2_threshold)
-        
-        #calculate small worldness
-        small_worldness, normalized_ccoef, normalized_path_length = calculate_small_worldness(brain_binaryMatrix, null2_binaryMatrix)
-        small_worldness_values_null2.append(small_worldness)
-        
-        percentage += 0.05
-    
-    print(small_worldness_values_null2)
-    plt.plot(np.arange(0.15,0.55,0.05),small_worldness_values_null1,marker ="o",label = "Null 1")
-    plt.plot(np.arange(0.15,0.55,0.05),small_worldness_values_null2,marker ="o",label = "Null 2")
-    plt.xlabel("threshold percentage")
-    plt.ylabel("small worldness")
-    plt.legend()
-    plt.title("Comparing Null 1 and Null 2")
-    plt.show()
-        
+    Returns:
+    - dict of results (avg clustering, path length, and small worldness per method)
+    """
 
-def cell_8():
-    #average it out for some iterations to normalize the randomness
-    #while also having a threshold density from 5% to 50%
-    
-    iterations = 25
-    
-    #first collect the data for the brain
-    x ,roi_timeseries = readMRIFile('/Users/niva.ranavat/Desktop/Data/SAL_01/roi',200)
-    brain_correlationMatrix = createCorrelationMatrix(roi_timeseries,"pearson")
-    
-    
-    #range for the threshold percentages
-    start = 0.15
-    end = 0.60
-    delta = 0.05
-    threshold_range = int((end-start)//delta)+2
-    
-    #store the small worldness values
-    small_worldness_values_null1 = np.zeros((iterations,threshold_range))
-    small_worldness_values_null2 = np.zeros((iterations,threshold_range))
-    
-    #store clustering coefficient
-    clustering_coef_values_null1 = np.zeros((iterations,threshold_range))
-    clustering_coef_values_null2 = np.zeros((iterations,threshold_range))
-    
-    #store path length values
-    path_length_values_null1 = np.zeros((iterations,threshold_range))
-    path_length_values_null2 = np.zeros((iterations,threshold_range))
-    
-    for iter in range(iterations):
-        
-        #scramble the phases for null1
-        null1_timeseries = []
-        #doing the fourier transform on each 
-        for i in range(len(roi_timeseries)):
-            series = phaseScramble1(roi_timeseries[i])
-            null1_timeseries.append(series)
-    
-        #correlation matrix
-        null1_correlationMatrix = createCorrelationMatrix(null1_timeseries,"pearson")
-    
-        #randomize the correlation matrix for null 2
-        sd = getSDVofROITimeseries(roi_timeseries)
-        null2_correlationMatrix = randomizeCorrelationMatrix(brain_correlationMatrix,sd)
-        
-        percentage = start
-        p_iter = 0
-    
-        #the loop for the range of threshold
-        while percentage <= end:
-    
-            
-             # get the threshold
-            brain_threshold = findThreshold(brain_correlationMatrix,percentage)
-            null1_threshold = findThreshold(null1_correlationMatrix,percentage)
-            null2_threshold = findThreshold(null2_correlationMatrix,percentage)
-            
-            #binarize
-            brain_binaryMatrix = binarize(brain_correlationMatrix,brain_threshold)
-            null1_binaryMatrix = binarize(null1_correlationMatrix,null1_threshold)
-            null2_binaryMatrix = binarize(null2_correlationMatrix,null2_threshold)
-    
-            
-            
-            #calculate clustering coefficient
-            small_worldness_null1, normalized_ccoef_null1, normalized_path_length_null1 = calculate_small_worldness(brain_binaryMatrix, null1_binaryMatrix)
-            small_worldness_null2, normalized_ccoef_null2, normalized_path_length_null2 = calculate_small_worldness(brain_binaryMatrix, null2_binaryMatrix)
-            
-            clustering_coef_values_null1[iter][p_iter] = normalized_ccoef_null1
-            clustering_coef_values_null2[iter][p_iter] = normalized_ccoef_null2
-        
-            
-            path_length_values_null1[iter][p_iter] = normalized_path_length_null1
-            path_length_values_null2[iter][p_iter] = normalized_path_length_null2
-            
-            small_worldness_values_null1[iter][p_iter] = small_worldness_null1
-            small_worldness_values_null2[iter][p_iter] = small_worldness_null2
-    
-            
-            percentage += delta
-            p_iter += 1
-    
-        
-    #store the small worldness values
-    small_worldness_values_null1_avg = np.mean(small_worldness_values_null1,axis=0)
-    small_worldness_values_null2_avg = np.mean(small_worldness_values_null2,axis=0)
-    
-    #store clustering coefficient
-    clustering_coef_values_null1_avg = np.mean(clustering_coef_values_null1,axis=0)
-    clustering_coef_values_null2_avg = np.mean(clustering_coef_values_null2,axis=0)
-    
-    #store path length values
-    path_length_values_null1_avg = np.mean(path_length_values_null1,axis=0)
-    path_length_values_null2_avg = np.mean(path_length_values_null2,axis=0)
-    
-    
-    
-    #plot the averages that was found so far
-    fig,ax = plt.subplots(1,3,figsize = (25,5))
-    
-    ax[0].plot(np.arange(start,end+delta,delta),clustering_coef_values_null1_avg,marker='o',label = "Time Series")
-    ax[0].plot(np.arange(start,end+delta,delta),clustering_coef_values_null2_avg,marker='o',label = "Correlation")
-    ax[0].set_title("Normalized Clustering Coefficient")
-    ax[0].set_ylabel("Normalized Clustering Coefficient")
-    ax[0].set_xlabel("Threshold Density Percentage, %")
-    ax[0].legend()
-    
-    ax[1].plot(np.arange(start,end+delta,delta),path_length_values_null1_avg,marker='o',label = "Time Series")
-    ax[1].plot(np.arange(start,end+delta,delta),path_length_values_null2_avg,marker='o',label = "Correlation")
-    ax[1].set_title("Normalized Path Length")
-    ax[1].set_ylabel("Normalized Path Length")
-    ax[1].set_xlabel("Threshold Density Percentage, %")
-    ax[1].legend()
-    
-    
-    ax[2].plot(np.arange(start,end+delta,delta),small_worldness_values_null1_avg,marker='o',label = "Time Series")
-    ax[2].plot(np.arange(start,end+delta,delta),small_worldness_values_null2_avg,marker='o',label = "Correlation")
-    ax[2].set_title("Small Worldness")
-    ax[2].set_ylabel("Small Worldness")
-    ax[2].set_xlabel("Threshold Density Percentage, %")
-    ax[2].legend()     
-    
-    #save the figure
-    plt.savefig("Average Small Worldness Plots.png")
-    plt.show()
-    
-    print(clustering_coef_values_null2_avg)
-    print(path_length_values_null2_avg)
-    print(small_worldness_values_null2_avg)
+    threshold_values = np.arange(threshold_start, threshold_end + threshold_step, threshold_step)
+    num_thresholds = len(threshold_values)
 
-def cell_9():
-    #average it out for some iterations to normalize the randomness
-    #while also having a threshold density from 5% to 50%
-    
-    iterations = 25
-    
-    #first collect the data for the brain
-    x ,roi_timeseries = readMRIFile('/Users/niva.ranavat/Desktop/Data/SAL_01/roi',200)
-    brain_correlationMatrix = createCorrelationMatrix(roi_timeseries,"pearson")
-    
-    
-    #range for the threshold percentages
-    start = 0.15
-    end = 0.60
-    delta = 0.05
-    threshold_range = int((end-start)//delta)+2
-    
-    #store the small worldness values
-    small_worldness_values_null2_1 = np.zeros((iterations,threshold_range))
-    small_worldness_values_null2_2 = np.zeros((iterations,threshold_range))
-    
-    #store clustering coefficient
-    clustering_coef_values_null2_1 = np.zeros((iterations,threshold_range))
-    clustering_coef_values_null2_2 = np.zeros((iterations,threshold_range))
-    
-    #store path length values
-    path_length_values_null2_1 = np.zeros((iterations,threshold_range))
-    path_length_values_null2_2 = np.zeros((iterations,threshold_range))
-    
-    for iter in range(iterations):
-        
-    
-        #randomize the correlation matrix for null 2
-        sd = getSDVofROITimeseries(roi_timeseries)
-        null2_correlationMatrix1 = null_covariance(brain_correlationMatrix,sd)
-        null2_correlationMatrix2 = randomizeCorrelationMatrix(brain_correlationMatrix,sd)
-        
-        percentage = start
-        p_iter = 0
-    
-        #the loop for the range of threshold
-        while percentage <= end:
-    
-            
-             # get the threshold
-            brain_threshold = findThreshold(brain_correlationMatrix,percentage)
-            null2_threshold1 = findThreshold(null2_correlationMatrix1,percentage)
-            null2_threshold2 = findThreshold(null2_correlationMatrix2,percentage)
-            
-            #binarize
-            brain_binaryMatrix = binarize(brain_correlationMatrix,brain_threshold)
-            null2_binaryMatrix1 = binarize(null2_correlationMatrix1,null2_threshold1)
-            null2_binaryMatrix2 = binarize(null2_correlationMatrix2,null2_threshold2)
-    
-            
-            
-            #calculate clustering coefficient
-            small_worldness_null2_1, normalized_ccoef_null2_1, normalized_path_length_null2_1 = calculate_small_worldness(brain_binaryMatrix, null2_binaryMatrix1)
-            small_worldness_null2_2, normalized_ccoef_null2_2, normalized_path_length_null2_2 = calculate_small_worldness(brain_binaryMatrix, null2_binaryMatrix2)
-            
-            clustering_coef_values_null2_1[iter][p_iter] = normalized_ccoef_null2_1
-            clustering_coef_values_null2_2[iter][p_iter] = normalized_ccoef_null2_2
-        
-            
-            path_length_values_null2_1[iter][p_iter] = normalized_path_length_null2_1
-            path_length_values_null2_2[iter][p_iter] = normalized_path_length_null2_2
-            
-            small_worldness_values_null2_1[iter][p_iter] = small_worldness_null2_1
-            small_worldness_values_null2_2[iter][p_iter] = small_worldness_null2_2
-    
-            
-            percentage += delta
-            p_iter += 1
-    
-        
-    #store the small worldness values
-    small_worldness_values_null2_1_avg = np.mean(small_worldness_values_null2_1,axis=0)
-    small_worldness_values_null2_2_avg = np.mean(small_worldness_values_null2_2,axis=0)
-    
-    #store clustering coefficient
-    clustering_coef_values_null2_1_avg = np.mean(clustering_coef_values_null2_1,axis=0)
-    clustering_coef_values_null2_2_avg = np.mean(clustering_coef_values_null2_2,axis=0)
-    
-    #store path length values
-    path_length_values_null2_1_avg = np.mean(path_length_values_null2_1,axis=0)
-    path_length_values_null2_2_avg = np.mean(path_length_values_null2_2,axis=0)
-    
-    
-    
-    #plot the averages that was found so far
-    fig,ax = plt.subplots(1,3,figsize = (25,5))
-    
-    ax[0].plot(np.arange(start,end+delta,delta),clustering_coef_values_null2_1_avg,marker='o',label = "HQS")
-    ax[0].plot(np.arange(start,end+delta,delta),clustering_coef_values_null2_2_avg,marker='o',label = "Correlation")
-    ax[0].set_title("Normalized Clustering Coefficient")
-    ax[0].set_ylabel("Normalized Clustering Coefficient")
-    ax[0].set_xlabel("Threshold Density Percentage, %")
-    ax[0].legend()
-    
-    ax[1].plot(np.arange(start,end+delta,delta),path_length_values_null2_1_avg,marker='o',label = "HQS")
-    ax[1].plot(np.arange(start,end+delta,delta),path_length_values_null2_2_avg,marker='o',label = "Correlation")
-    ax[1].set_title("Normalized Path Length")
-    ax[1].set_ylabel("Normalized Path Length")
-    ax[1].set_xlabel("Threshold Density Percentage, %")
-    ax[1].legend()
-    
-    
-    ax[2].plot(np.arange(start,end+delta,delta),small_worldness_values_null2_1_avg,marker='o',label = "HQS")
-    ax[2].plot(np.arange(start,end+delta,delta),small_worldness_values_null2_2_avg,marker='o',label = "Correlation")
-    ax[2].set_title("Small Worldness")
-    ax[2].set_ylabel("Small Worldness")
-    ax[2].set_xlabel("Threshold Density Percentage, %")
-    ax[2].legend()     
-    
-    #save the figure
-    plt.savefig("Average Small Worldness Plots.png")
-    plt.show()
-    
-    # print(clustering_coef_values_null2_avg)
-    # print(path_length_values_null2_avg)
-    # print(small_worldness_values_null2_avg)
+    # Load brain data
+    _, roi_ts = readMRIFile(roi_path, 200)
+    brain_corr = createCorrelationMatrix(roi_ts, "pearson")
+    sd = getSDVofROITimeseries(roi_ts)
 
+    # Setup methods
+    methods = []
+    labels = []
+
+    if include_brain:
+        methods.append(lambda: brain_corr)
+        labels.append("Brain")
+
+    if null_models:
+        for null_fn in null_models:
+            methods.append(lambda fn=null_fn: fn(brain_corr, roi_ts, sd))
+
+    if null_labels:
+        labels.extend(null_labels)
+
+    # Storage arrays
+    results = {
+        label: {
+            "sws": np.zeros((iterations, num_thresholds)),
+            "ccoef": np.zeros((iterations, num_thresholds)),
+            "path": np.zeros((iterations, num_thresholds))
+        } for label in labels
+    }
+
+    for it in range(iterations):
+        matrices = [method() for method in methods]
+
+        for t_idx, perc in enumerate(threshold_values):
+            brain_thresh = findThreshold(brain_corr, perc)
+            brain_bin = binarize(brain_corr, brain_thresh)
+
+            for m_idx, matrix in enumerate(matrices):
+                null_thresh = findThreshold(matrix, perc)
+                null_bin = binarize(matrix, null_thresh)
+                sws, ccoef, path = calculate_small_worldness(brain_bin, null_bin)
+                results[labels[m_idx]]["sws"][it, t_idx] = sws
+                results[labels[m_idx]]["ccoef"][it, t_idx] = ccoef
+                results[labels[m_idx]]["path"][it, t_idx] = path
+
+    # Averaging
+    avg_results = {}
+    for label in labels:
+        avg_results[label] = {
+            "sws": np.mean(results[label]["sws"], axis=0),
+            "ccoef": np.mean(results[label]["ccoef"], axis=0),
+            "path": np.mean(results[label]["path"], axis=0)
+        }
+
+    # Plotting
+    if plot:
+        fig, ax = plt.subplots(1, 3, figsize=(25, 5))
+
+        for label in labels:
+            ax[0].plot(threshold_values, avg_results[label]["ccoef"], marker='o', label=label)
+            ax[1].plot(threshold_values, avg_results[label]["path"], marker='o', label=label)
+            ax[2].plot(threshold_values, avg_results[label]["sws"], marker='o', label=label)
+
+        ax[0].set_title("Normalized Clustering Coefficient")
+        ax[0].set_ylabel("Coefficient")
+        ax[1].set_title("Normalized Path Length")
+        ax[1].set_ylabel("Path Length")
+        ax[2].set_title("Small Worldness")
+        ax[2].set_ylabel("SWS")
+
+        for a in ax:
+            a.set_xlabel("Threshold Density (%)")
+            a.legend()
+
+        fig.suptitle(plot_title)
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path)
+
+        plt.show()
+
+    return avg_results
+
+
+# Example main workflow using only utils and domain-specific functions
+def main(folder_path, size=200, method="pearson", density=0.15, plot=True, save_plots=False):
+    x, roi_timeseries = read_mri_file(folder_path, size)
+    if plot:
+        plot_timeseries(roi_timeseries, x, title="Original ROI Time Series", show=plot, save_path="TimeSeries_Plots.png" if save_plots else None)
+    corr_matrix = create_correlation_matrix(roi_timeseries, method)
+    if plot:
+        plot_correlation_matrix(corr_matrix, title="Correlation Matrix", save_path="Correlation_Matrix.png" if save_plots else None, show=plot)
+    threshold = find_threshold(corr_matrix, density)
+    binary_matrix = binarize_matrix(corr_matrix, threshold)
+    if plot:
+        plot_correlation_matrix(binary_matrix, title="Binarized Correlation Matrix", save_path="Binarized_Correlation_Matrix.png" if save_plots else None, show=plot)
+    network = nx.from_numpy_array(binary_matrix)
+    nx.draw(network, node_size=20, with_labels=True)
+    # Example phase scrambling
+    scrambled = phase_scramble_1(roi_timeseries[0])
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(10, 4))
+        plt.plot(x, roi_timeseries[0], label="Original")
+        plt.plot(x, scrambled.real, label="Scrambled")
+        plt.title("Phase Scrambling Example (First ROI)")
+        plt.legend()
+        if save_plots:
+            plt.savefig("Phase_Scramble_Example.png")
+        plt.show()
+    return {
+        'x': x,
+        'roi_timeseries': roi_timeseries,
+        'corr_matrix': corr_matrix,
+        'binary_matrix': binary_matrix,
+        'network': network,
+        'scrambled_first_roi': scrambled
+    }
+
+    return roi_timeseries, null_timeseries
