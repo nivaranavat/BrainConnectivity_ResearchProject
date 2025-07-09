@@ -23,9 +23,6 @@ from source.utils.matrix_utils import (
     findThreshold,
     binarize,
     randomizeCorrelationMatrix,
-    null_covariance,
-    createNetwork,
-    binarizeWithOutThreshold,
     calculate_sdv
 )
 from source.utils.phase_utils import calculate_small_worldness

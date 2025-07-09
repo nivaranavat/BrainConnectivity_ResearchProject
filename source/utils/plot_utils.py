@@ -101,14 +101,12 @@ def plot_histogram(matrix, title="Matrix Histogram"):
 
     #graph out the boxplot of our data
 def box_plot(tp_dict,subplot_index, figure, drug_type, y_value, y_range):
-    df = pd.DataFrame([
-        {"Timepoint": tp, "Value": val}
-        for tp, values in tp_dict.items()
-        for val in values
-    ])
-
+    df = pd.DataFrame(data=tp_dict)
     row, col, index = subplot_index
     ax = figure.add_subplot(row, col, index)
+    print("row: ", row, "col: ", col, "index: ", index)
+    print("drug_type: ", drug_type, "y_value: ", y_value, "y_range: ", y_range)
+    print("df: ", df)
     
     name = drug_type
     if drug_type in drug_names:
@@ -118,9 +116,18 @@ def box_plot(tp_dict,subplot_index, figure, drug_type, y_value, y_range):
     elif "SCR" in drug_type:
         name = "\u03BB'" + drug_names[name.split("SCR")[1]]
     
+
     ax.title.set_text((name + " " + y_value))
     ax.set_ylim(y_range)
-
-    sns.boxplot(ax=ax, data=df, x="Timepoint", y="Value", width=0.5, color='lightgray')
-    sns.stripplot(ax=ax, data=df, x="Timepoint", y="Value", size=5, jitter=True)
+    #will need to set the range here
+    sns.boxplot(ax = ax, 
+                data=df, 
+                width=0.5, 
+                color='lightgray',
+                  )
+    sns.stripplot(ax = ax,
+                  data=df,
+                  size=5,
+                  jitter=True,
+                 )
     
